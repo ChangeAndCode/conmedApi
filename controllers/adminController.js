@@ -34,10 +34,10 @@ const updateUserAccess = async (req, res) => {
   if (req.user.id.toString() === userId && !isActive) {
       return res.status(403).json({ message: 'No puedes deshabilitar tu propia cuenta.' });
   }
-   if (req.user.id.toString() === userId && role === 'user' && req.user.role === 'admin') {
+  if (req.user.id.toString() === userId && role === 'user' && req.user.role === 'admin') {
       // Logic to prevent self-demotion if you're the only admin
       // For now, allow it, but in a production system, check if there's at least one other admin.
-   }
+  }
 
 
   try {

@@ -71,7 +71,9 @@ web_modules/
 
 # Yarn Integrity file
 .yarn-integrity
-sftp*
+sftp_*/
+!services/sftpService.js
+
 # dotenv environment variable files
 .env
 .env.development.local
