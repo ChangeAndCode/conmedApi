@@ -37,6 +37,7 @@ const processFileForConversion = async (
   switch (fileExtension) {
     case ".xls":
     case ".xlsx":
+    case ".xlsm":
       parsedData = await parseXLSX(fileBuffer, documentType);
       break;
     case ".csv":
@@ -72,11 +73,20 @@ const processFileForConversion = async (
 
   // Step 4: (Opcional) generación del TXT
   const baseName = path.parse(originalName).name;
-  const outputExt = outputFormat || "txt";
+  const outputExt = documentType === "splScrap" ? "csv" : outputFormat || "txt";
+  const isSplScrap = documentType === "splScrap";
   let convertedFilePath = null;
 
   if (!hasErrors || WRITE_TXT_ON_VALIDATION_ERROR) {
-    const outputFileName = `${baseName}.${outputExt}`;
+    let outputFileName = `${baseName}.${outputExt}`;
+
+    // For splScrap use PI/PE + timestamp filename convention
+    if (isSplScrap) {
+      const prefix = pickSplScrapPrefix(transformedData);
+      const generated = generateSplScrapFilename(prefix, new Date());
+      outputFileName = `${generated}.${outputExt}`;
+    }
+
     convertedFilePath = path.join(
       __dirname,
       "..",
@@ -84,11 +94,16 @@ const processFileForConversion = async (
       outputFileName
     );
     await fs.mkdir(path.dirname(convertedFilePath), { recursive: true });
-    await writeToStandardizedTXT(
-      transformedData,
-      convertedFilePath,
-      documentType
-    );
+
+    if (isSplScrap) {
+      await writeSplScrapCSV(transformedData, convertedFilePath);
+    } else {
+      await writeToStandardizedTXT(
+        transformedData,
+        convertedFilePath,
+        documentType
+      );
+    }
   }
 
   // Step 5: Generate error report if any errors occurred
@@ -196,6 +211,115 @@ async function writeToStandardizedTXT(data, filePath, documentType) {
 
   await fs.writeFile(filePath, lines.join("\n"));
 }
+
+// --- splScrap CSV writer ---
+const SPL_SCRAP_HEADERS = [
+  { field: "Customer(southbound) / Ship to (northbound)", header: "Ship to" },
+  { field: "Type of goods", header: "Type of goods" },
+  { field: "Type of shipment", header: "Type of shipment" },
+  { field: "Expected date of arrival", header: "Expected date of arrival" },
+  { field: "Waybill number", header: "Waybill Number" },
+  { field: "Total gross weight", header: "Total gross Weight" },
+  { field: "Total bundles", header: "Total bundles" },
+  { field: "Part Number", header: "Part Number" },
+  { field: "Description", header: "Description" },
+  { field: "Quantity", header: "Quantity" },
+  { field: "Unit Of Measure", header: "Unit of Measure" },
+  { field: ["Unit Value (USD)", "Unit Value(USD)"], header: "Unit Value (USD)" },
+  { field: ["Added Value (USD)", "Added Value(USD)"], header: "Added Value (USD)" },
+  { field: ["Total Value (USD)", "Total Value(USD)"], header: "Total Value (USD)" },
+  { field: "Unit Net Weight", header: "Unit Net Weight" },
+  { field: "Country of Origin", header: "Country of Origin" },
+  { field: "ECCN", header: "ECCN" },
+  { field: "License No.", header: "License No." },
+  { field: "License Exception", header: "License Exception" },
+  { field: "US IMP HTS Code", header: "US IMP HTS Code" },
+  { field: "US EXP HTS Code", header: "US EXP HTS Code" },
+  { field: "Regime", header: "Regime" },
+  { field: "Brand", header: "Brand" },
+  { field: "Model", header: "Model" },
+  { field: "Serial", header: "Serial" },
+  { field: "Power Source Type", header: "Power Source Type" },
+  { field: "Capacity", header: "Capacity" },
+  { field: "Main Function", header: "Main Function" },
+  { field: "PO Number", header: "PO Number" },
+];
+
+const formatDateYmd = (value) => {
+  if (!value) return "";
+  let d;
+  if (value instanceof Date) {
+    d = value;
+  } else if (typeof value === "number" && !Number.isNaN(value)) {
+    const base = new Date(Date.UTC(1899, 11, 30)); // Excel serial date base
+    d = new Date(base.getTime() + value * 86400000);
+  } else {
+    d = new Date(value);
+  }
+  if (Number.isNaN(d.getTime())) return String(value);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
+};
+
+const toCsvValue = (value) => {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return formatDateYmd(value);
+  if (Number.isFinite(value)) return String(value);
+  return String(value);
+};
+
+async function writeSplScrapCSV(data, filePath) {
+  const rows = data.Sheet1 || [];
+  const lines = [];
+  const headerLine = SPL_SCRAP_HEADERS.map((h) => h.header).join(",");
+  lines.push(headerLine);
+
+  const pickValue = (record, field) => {
+    if (Array.isArray(field)) {
+      for (const f of field) {
+        if (record[f] !== undefined) return record[f];
+      }
+      return undefined;
+    }
+    return record[field];
+  };
+
+  for (const record of rows) {
+    const line = SPL_SCRAP_HEADERS.map(({ field }) => {
+      const raw = pickValue(record, field);
+      // basic CSV escaping for commas/quotes
+      let val = toCsvValue(raw);
+      if (/[",\n]/.test(val)) {
+        val = `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    }).join(",");
+    lines.push(line);
+  }
+
+  await fs.writeFile(filePath, lines.join("\n"));
+}
+
+// prefix PI for Southbound, PE for Northbound (default PE)
+const pickSplScrapPrefix = (data) => {
+  const rows = data.Sheet1 || [];
+  if (!rows.length) return "PE";
+  const shipment = String(rows[0]["Type of shipment"] || "").toLowerCase();
+  if (shipment.includes("south")) return "PI";
+  if (shipment.includes("north")) return "PE";
+  return "PE";
+};
+
+const generateSplScrapFilename = (prefix, date = new Date()) => {
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const yy = String(date.getFullYear()).slice(-2);
+  return `${prefix}${dd}${hh}${mm}_${month}${yy}`;
+};
 
 module.exports = {
   processFileForConversion,
