@@ -6,6 +6,7 @@ const sftpService = require("./sftpService");
 const conversionJobRepository = require("../repositories/conversionJobRepository");
 const { getDocumentTypeByPrefix } = require("../data/documentTypeRegistry");
 const { detectDocumentType } = require("../utils/documentDetector");
+const { getDefaultFormat } = require("../utils/documentFormatRules");
 
 const INPUT_DIR =
   process.env.SFTP_LOCAL_INPUT_DIR ||
@@ -117,7 +118,7 @@ const processWatchedFiles = async () => {
       }
       // --- Fin detección ---
 
-      const outputFormat = documentType === "splScrap" ? "csv" : "txt";
+      const outputFormat = getDefaultFormat(documentType) || "txt";
       const conversionOptions = { documentType };
 
       console.log(`[Automated Service] Processing file: ${originalName}`);

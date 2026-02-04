@@ -8,6 +8,7 @@ const {
   applyBusinessValidations,
 } = require("../utils/validationUtils");
 const { applyTransformations } = require("../utils/transformationUtils");
+const { getDefaultFormat } = require("../utils/documentFormatRules");
 
 const WRITE_TXT_ON_VALIDATION_ERROR =
   (process.env.WRITE_TXT_ON_VALIDATION_ERROR || "false").toLowerCase() ===
@@ -71,9 +72,9 @@ const processFileForConversion = async (
 
   const hasErrors = errorReport.length > 0;
 
-  // Step 4: (Opcional) generación del TXT
+  // Step 4: (Opcional) generación del archivo de salida
   const baseName = path.parse(originalName).name;
-  const outputExt = documentType === "splScrap" ? "csv" : outputFormat || "txt";
+  const outputExt = outputFormat || getDefaultFormat(documentType) || "txt";
   const isSplScrap = documentType === "splScrap";
   let convertedFilePath = null;
 

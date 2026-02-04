@@ -90,10 +90,16 @@ const updateConversionJobStatus = async (
   );
 };
 
+const deleteJobsByUserId = async (userId, session = null) => {
+  const options = session ? { session } : {};
+  return await ConversionJob.deleteMany({ userId: userId }, options);
+};
+
 module.exports = {
   createConversionJob,
   getConversionJobById,
   updateConversionJobStatus,
   getPaginatedJobsByUserId, // <-- EXPORT THE PAGINATED FUNCTION
   getPaginatedAllJobs, // <-- EXPORT THE PAGINATED FUNCTION
+  deleteJobsByUserId,
 };
