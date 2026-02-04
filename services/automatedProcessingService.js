@@ -117,7 +117,7 @@ const processWatchedFiles = async () => {
       }
       // --- Fin detección ---
 
-      const outputFormat = "txt";
+      const outputFormat = documentType === "splScrap" ? "csv" : "txt";
       const conversionOptions = { documentType };
 
       console.log(`[Automated Service] Processing file: ${originalName}`);
