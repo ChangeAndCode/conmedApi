@@ -73,6 +73,8 @@ const updateConversionJobStatus = async (
   {
     convertedFilePath = null,
     errorReportPath = null,
+    remoteConvertedPath = null,
+    remoteErrorPath = null,
     completedAt = null,
     errorMessage = null,
   } = {}
@@ -80,6 +82,8 @@ const updateConversionJobStatus = async (
   const updateFields = { status };
   if (convertedFilePath) updateFields.convertedFilePath = convertedFilePath;
   if (errorReportPath) updateFields.errorReportPath = errorReportPath;
+  if (remoteConvertedPath) updateFields.remoteConvertedPath = remoteConvertedPath;
+  if (remoteErrorPath) updateFields.remoteErrorPath = remoteErrorPath;
   if (completedAt) updateFields.completedAt = completedAt;
   if (errorMessage) updateFields.errorMessage = errorMessage;
 
@@ -95,6 +99,24 @@ const deleteJobsByUserId = async (userId, session = null) => {
   return await ConversionJob.deleteMany({ userId: userId }, options);
 };
 
+/**
+ * Obtiene el Ãºltimo job automatizado para un archivo y tipo de documento,
+ * incluyendo la ruta remota del Ãºltimo CSV subido (para poder borrarlo).
+ */
+const getLatestAutomatedJobByFileNameAndDocType = async (
+  fileName,
+  documentType
+) => {
+  return await ConversionJob.findOne({
+    fileName,
+    isAutomated: true,
+    "conversionOptions.documentType": documentType,
+    remoteConvertedPath: { $exists: true },
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+};
+
 module.exports = {
   createConversionJob,
   getConversionJobById,
@@ -102,4 +124,5 @@ module.exports = {
   getPaginatedJobsByUserId, // <-- EXPORT THE PAGINATED FUNCTION
   getPaginatedAllJobs, // <-- EXPORT THE PAGINATED FUNCTION
   deleteJobsByUserId,
+  getLatestAutomatedJobByFileNameAndDocType,
 };
