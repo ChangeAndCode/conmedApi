@@ -2,7 +2,12 @@
 const path = require("path");
 const fs = require("fs/promises");
 const { getRegistryEntry } = require("../data/documentTypeRegistry");
-const { parseXLSX, parseCSV, parseTXT } = require("../utils/fileParsers");
+const {
+  parseXLSX,
+  parseCSV,
+  parseTXT,
+  generateFilename,
+} = require("../utils/fileParsers");
 const {
   validateDataIntegrity,
   applyBusinessValidations,
@@ -86,6 +91,18 @@ const processFileForConversion = async (
       const prefix = pickSplScrapPrefix(transformedData);
       const generated = generateSplScrapFilename(prefix, new Date());
       outputFileName = `${generated}.${outputExt}`;
+    } else {
+      // FG / RM / BM usan convención TYPE + DDHHMM.MMYY
+      const typePrefixMap = {
+        finishedProduct: "FG",
+        rawMaterial: "RM",
+        billOfMaterials: "BM",
+      };
+      const fileType = typePrefixMap[documentType];
+      if (fileType) {
+        const generated = generateFilename(fileType, new Date());
+        outputFileName = `${generated}.${outputExt}`;
+      }
     }
 
     convertedFilePath = path.join(
