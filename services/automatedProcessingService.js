@@ -133,6 +133,14 @@ const processWatchedFiles = async () => {
         isAutomated: true,
       });
 
+      // Buscar Ãºltimo job automatizado del mismo archivo/tipo para borrar su remoto luego
+      const previousJob =
+        await conversionJobRepository.getLatestAutomatedJobByFileNameAndDocType(
+          originalName,
+          documentType
+        );
+      const previousRemotePath = previousJob?.remoteConvertedPath || null;
+
       const processingResult =
         await fileConversionService.processFileForConversion(
           fileBuffer,
@@ -146,16 +154,6 @@ const processWatchedFiles = async () => {
       convertedFilePath = processingResult.convertedFilePath; // puede ser null
       errorReportPath = processingResult.errorReportPath;
       const jobStatus = processingResult.status; // "completed" | "completed_with_errors" | "failed"
-
-      await conversionJobRepository.updateConversionJobStatus(
-        newJob._id,
-        jobStatus,
-        {
-          convertedFilePath,
-          errorReportPath,
-          completedAt: new Date(),
-        }
-      );
 
       console.log(
         `[Automated Service] Job result for ${originalName} -> status=${jobStatus}, convertedFilePath=${
@@ -185,6 +183,9 @@ const processWatchedFiles = async () => {
       const canUploadTxt =
         !hasErrors || (hasErrors && ALLOW_UPLOAD_ON_VALIDATION_ERROR);
 
+      let remoteConvertedPath = null;
+      let remoteErrorPath = null;
+
       // (1) TXT convertido (sin .txt en remoto)
       if (
         canUploadTxt &&
@@ -194,29 +195,64 @@ const processWatchedFiles = async () => {
         const remoteBase = path
           .basename(convertedFilePath)
           .replace(/\.txt$/i, "");
+        remoteConvertedPath = toPosix(
+          path.join(sftpRemoteUploadDir, remoteBase)
+        );
         uploads.push({
           local: convertedFilePath,
-          remote: toPosix(path.join(sftpRemoteUploadDir, remoteBase)),
+          remote: remoteConvertedPath,
         });
       }
 
       // (2) Reporte de errores (si existe)
       if (errorReportPath && (await fileExists(errorReportPath))) {
+        remoteErrorPath = toPosix(
+          path.join(sftpRemoteErrorDir, path.basename(errorReportPath))
+        );
         uploads.push({
           local: errorReportPath,
-          remote: toPosix(
-            path.join(sftpRemoteErrorDir, path.basename(errorReportPath))
-          ),
+          remote: remoteErrorPath,
         });
       }
 
       if (uploads.length) {
-        await sftpService.uploadFilesViaSftp(uploads);
+        const uploadResults = await sftpService.uploadFilesViaSftp(uploads);
+        // Capturar la ruta final por si la estrategia de nombre la cambia
+        const convertedUpload = uploadResults.find(
+          (r) => r.local === convertedFilePath
+        );
+        const errorUpload = uploadResults.find(
+          (r) => r.local === errorReportPath
+        );
+        if (convertedUpload) remoteConvertedPath = convertedUpload.remote;
+        if (errorUpload) remoteErrorPath = errorUpload.remote;
+
+        // Si hubo versiÃ³n previa, bÃ³rrala (solo tras subir la nueva)
+        if (
+          previousRemotePath &&
+          remoteConvertedPath &&
+          previousRemotePath !== remoteConvertedPath
+        ) {
+          await sftpService.deleteRemoteFile(previousRemotePath);
+        }
       } else {
         console.log(
           "[SFTP] No files queued for upload (no TXT permitido/creado y/o no hubo reporte de error)."
         );
       }
+
+      // Actualiza el job ahora que ya sabemos las rutas remotas
+      await conversionJobRepository.updateConversionJobStatus(
+        newJob._id,
+        jobStatus,
+        {
+          convertedFilePath,
+          errorReportPath,
+          remoteConvertedPath,
+          remoteErrorPath,
+          completedAt: new Date(),
+        }
+      );
 
       // --- Limpieza de artefactos locales ---
       const tryUnlink = async (p) => {

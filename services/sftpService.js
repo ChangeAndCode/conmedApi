@@ -180,6 +180,43 @@ async function uploadFilesViaSftp(files) {
   return results;
 }
 
+/**
+ * Elimina un archivo remoto si existe. No lanza error si no estÃ¡.
+ * @param {string} remotePath - Ruta POSIX en el SFTP.
+ */
+async function deleteRemoteFile(remotePath) {
+  if (!remotePath) return false;
+  const sftp = new Client();
+  let connected = false;
+  try {
+    await sftp.connect(sftpConfig);
+    connected = true;
+    const exists = await safeExists(sftp, remotePath);
+    if (!exists) {
+      console.log(
+        `[SFTP Service] deleteRemoteFile: ${remotePath} no existe, nada que borrar.`
+      );
+      return false;
+    }
+    await sftp.delete(remotePath);
+    console.log(`[SFTP Service] deleteRemoteFile: eliminado ${remotePath}`);
+    return true;
+  } catch (err) {
+    console.error(
+      `[SFTP Service] deleteRemoteFile: error al borrar ${remotePath}:`,
+      err.message || err
+    );
+    return false;
+  } finally {
+    if (connected) {
+      try {
+        await sftp.end();
+      } catch {}
+    }
+  }
+}
+
 module.exports = {
   uploadFilesViaSftp,
+  deleteRemoteFile,
 };
