@@ -100,8 +100,8 @@ const deleteJobsByUserId = async (userId, session = null) => {
 };
 
 /**
- * Obtiene el Ãºltimo job automatizado para un archivo y tipo de documento,
- * incluyendo la ruta remota del Ãºltimo CSV subido (para poder borrarlo).
+ * Obtiene el ultimo job automatizado para un archivo y tipo de documento,
+ * incluyendo la ruta remota del ultimo CSV subido (para poder borrarlo).
  */
 const getLatestAutomatedJobByFileNameAndDocType = async (
   fileName,
