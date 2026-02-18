@@ -60,9 +60,19 @@ const processWatchedFiles = async () => {
     return;
   }
 
+  const candidates = [];
   for (const fileName of files) {
     const filePath = path.join(INPUT_DIR, fileName);
-    const stats = await fs.stat(filePath);
+    let stats;
+    try {
+      stats = await fs.stat(filePath);
+    } catch (err) {
+      console.warn(
+        `[Automated Service] Could not stat ${fileName}, skipping.`,
+        err
+      );
+      continue;
+    }
     if (
       !stats.isFile() ||
       fileName.startsWith(".") ||
@@ -74,16 +84,35 @@ const processWatchedFiles = async () => {
       );
       continue;
     }
+    candidates.push({ fileName, filePath, stats });
+  }
 
-    const originalName = fileName;
-    let documentType = null;
-    let fileBuffer;
-    let newJob = null;
-    let convertedFilePath = null;
-    let errorReportPath = null;
+  if (!candidates.length) {
+    console.log("[Automated Service] No valid files to process.");
+    return;
+  }
 
-    try {
-      fileBuffer = await fs.readFile(filePath);
+  candidates.sort((a, b) => {
+    const aTime = a.stats.birthtimeMs ?? a.stats.mtimeMs;
+    const bTime = b.stats.birthtimeMs ?? b.stats.mtimeMs;
+    if (aTime !== bTime) return aTime - bTime;
+    return a.stats.mtimeMs - b.stats.mtimeMs;
+  });
+
+  const { fileName, filePath } = candidates[0];
+  const originalName = fileName;
+  console.log(
+    `[Automated Service] Queued files: ${candidates.length}. Processing oldest first: ${originalName}`
+  );
+
+  let documentType = null;
+  let fileBuffer;
+  let newJob = null;
+  let convertedFilePath = null;
+  let errorReportPath = null;
+
+  try {
+    fileBuffer = await fs.readFile(filePath);
 
       // --- Detección automática del tipo ---
       documentType = await detectDocumentType(fileBuffer, originalName);
@@ -114,7 +143,7 @@ const processWatchedFiles = async () => {
         console.log(
           `[Automated Service] Moved unknown file type ${originalName} to ${FAILED_DIR}`
         );
-        continue;
+        return;
       }
       // --- Fin detección ---
 
@@ -133,7 +162,7 @@ const processWatchedFiles = async () => {
         isAutomated: true,
       });
 
-      // Buscar Ãºltimo job automatizado del mismo archivo/tipo para borrar su remoto luego
+      // Buscar ultimo job automatizado del mismo archivo/tipo para borrar su remoto luego
       const previousJob =
         await conversionJobRepository.getLatestAutomatedJobByFileNameAndDocType(
           originalName,
@@ -227,7 +256,7 @@ const processWatchedFiles = async () => {
         if (convertedUpload) remoteConvertedPath = convertedUpload.remote;
         if (errorUpload) remoteErrorPath = errorUpload.remote;
 
-        // Si hubo versiÃ³n previa, bÃ³rrala (solo tras subir la nueva)
+        // Si hubo version previa, borrala (solo tras subir la nueva)
         if (
           previousRemotePath &&
           remoteConvertedPath &&
@@ -311,7 +340,6 @@ const processWatchedFiles = async () => {
         if (errorReportPath) await fs.unlink(errorReportPath).catch(() => {});
       } catch {}
     }
-  }
 };
 
 module.exports = {
