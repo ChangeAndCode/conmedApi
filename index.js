@@ -45,10 +45,6 @@ console.log("DEBUG: MONGO_URI from .env:", process.env.MONGO_URI);
 // If this logs 'undefined' or an empty string, check your .env file or its path.
 // --- END TEMPORARY DEBUGGING LINE ---
 
-// 3. Conexión a la Base de Datos
-// This function in config/db.js should use process.env.MONGO_URI
-connectDB();
-
 // 4. Middlewares Globales
 app.use(express.json()); // For parsing application/json bodies
 app.use(express.urlencoded({ extended: true })); // For parsing URL-encoded bodies
@@ -86,24 +82,6 @@ app.use(passport.session()); // Enables Passport to use Express sessions for per
 // These functions define how Passport will authenticate users (e.g., Google, Local, JWT)
 setupPassport(passport); // Set up Google OAuth and Local strategies
 setupPassportJwt(passport); // Set up JWT strategy
-
-// --- NEW: Initialize Automated File Processing ---
-// Ensure the necessary directories for automated processing exist ONCE on application start
-ensureDirectoriesExist()
-  .then(() => {
-    console.log("[App Startup] All necessary file directories are ensured.");
-    // Start the cron job AFTER directories are confirmed ready
-    const cronSchedule =
-      process.env.AUTOMATED_FILE_PROCESSOR_CRON_SCHEDULE || "*/5 * * * *"; // Default to every 5 minutes
-    startAutomatedFileProcessor(cronSchedule);
-  })
-  .catch((err) => {
-    console.error(
-      "[App Startup] Failed to ensure automated processing directories or start cron job:",
-      err
-    );
-    // Depending on criticality, you might want to exit the process here: process.exit(1);
-  });
 
 // --- Frontend Serving (Bundled by esbuild) ---
 // Serve bundled static files from the 'dist' directory.
@@ -189,13 +167,41 @@ app.use((err, req, res, next) => {
 });
 
 // 10. Iniciar el Servidor
-app.listen(PORT, () => {
-  console.log(`Servidor escuchando en http://localhost:${PORT}`);
-  console.log(
-    "Ensure esbuild is also running in watch mode for frontend changes."
-  );
+const startServer = async () => {
+  // 3. Conexión a la Base de Datos
+  // This function in config/db.js should use process.env.MONGO_URI
+  await connectDB();
 
-  console.log(
-    "You can use `npm run dev` to start both backend and frontend automatically."
-  );
+  // --- Initialize Automated File Processing ---
+  // Ensure the necessary directories for automated processing exist ONCE on application start
+  try {
+    await ensureDirectoriesExist();
+    console.log("[App Startup] All necessary file directories are ensured.");
+    // Start the cron job AFTER directories are confirmed ready
+    const cronSchedule =
+      process.env.AUTOMATED_FILE_PROCESSOR_CRON_SCHEDULE || "*/5 * * * *"; // Default to every 5 minutes
+    startAutomatedFileProcessor(cronSchedule);
+  } catch (err) {
+    console.error(
+      "[App Startup] Failed to ensure automated processing directories or start cron job:",
+      err
+    );
+    // Depending on criticality, you might want to exit the process here: process.exit(1);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Servidor escuchando en http://localhost:${PORT}`);
+    console.log(
+      "Ensure esbuild is also running in watch mode for frontend changes."
+    );
+
+    console.log(
+      "You can use `npm run dev` to start both backend and frontend automatically."
+    );
+  });
+};
+
+startServer().catch((err) => {
+  console.error("[App Startup] Fatal error during startup:", err);
+  process.exit(1);
 });
