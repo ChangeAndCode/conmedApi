@@ -39,6 +39,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 console.log(PORT);
 
+// Trust reverse proxy (needed for secure cookies behind TLS terminators)
+app.set("trust proxy", 1);
+
 // --- TEMPORARY DEBUGGING LINE ---
 // Uncomment this line to check if MONGO_URI is loaded correctly from your .env
 console.log("DEBUG: MONGO_URI from .env:", process.env.MONGO_URI);
@@ -51,6 +54,7 @@ app.use(express.urlencoded({ extended: true })); // For parsing URL-encoded bodi
 
 // 5. Configuración de Sesiones con MongoStore
 // This connects Express sessions to your MongoDB database for persistent sessions
+const isProd = process.env.NODE_ENV === "production";
 app.use(
   session({
     secret: process.env.SESSION_SECRET, // Used to sign the session ID cookie
@@ -59,16 +63,16 @@ app.use(
     store: MongoStore.create({
       // IMPORTANT: Using process.env.MONGO_URI as in your first version
       mongoUrl: process.env.MONGO_URI,
-      collectionName: "sessions_hzo", // Name of the collection in MongoDB to store sessions
+      collectionName: "sessions_conmed", // Name of the collection in MongoDB to store sessions
       ttl: 14 * 24 * 60 * 60, // Session TTL in seconds (14 days)
       autoRemove: "interval", // Auto-remove expired sessions
       autoRemoveInterval: 10, // Interval in minutes to remove expired sessions
       // client: mongoose.connection.getClient(), // Optional: If you want to use the same client instance as mongoose
     }),
     cookie: {
-      secure: process.env.NODE_ENV === "production", // Use secure cookies in production (HTTPS)
+      secure: isProd, // Use secure cookies in production (HTTPS)
       httpOnly: true, // Prevents client-side JS from reading the cookie
-      sameSite: "lax",
+      sameSite: isProd ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000, // Cookie expiry time (1 day in milliseconds)
     },
   })
