@@ -70,15 +70,75 @@ const SPL_SCRAP_METADATA_ROWS = {
   "regime:": "Regime",
 };
 
+const SPL_SCRAP_LINE_ITEM_TEXT_FIELDS = [
+  "Part Number",
+  "Description",
+  "Unit Of Measure",
+  "Country of Origin",
+  "ECCN",
+  "License No.",
+  "License Exception",
+  "US IMP HTS Code",
+  "US EXP HTS Code",
+  "Brand",
+  "Model",
+  "Serial",
+  "Power Source Type",
+  "Capacity",
+  "Main Function",
+  "PO Number",
+];
+
+const SPL_SCRAP_LINE_ITEM_NUM_FIELDS = [
+  "Quantity",
+  "Unit Value (USD)",
+  "Added Value (USD)",
+  "Total Value (USD)",
+  "Unit Net Weight",
+];
+
+const isZeroLike = (value) => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "number") return value === 0;
+  if (value instanceof Date) return false;
+  const raw = String(value).trim();
+  if (raw === "") return false;
+  return /^0+([.,]0+)?$/.test(raw);
+};
+
+const hasSplScrapLineItemData = (row) => {
+  for (const field of SPL_SCRAP_LINE_ITEM_TEXT_FIELDS) {
+    const v = row[field];
+    if (v !== null && v !== undefined && String(v).trim() !== "") return true;
+  }
+  for (const field of SPL_SCRAP_LINE_ITEM_NUM_FIELDS) {
+    const v = row[field];
+    if (v === null || v === undefined || String(v).trim() === "") continue;
+    if (!isZeroLike(v)) return true;
+  }
+  return false;
+};
+
 const normalizeCellValue = (cell) => {
   if (!cell) return null;
-  // Prefer evaluated result for formulas
-  if (cell.value && typeof cell.value === "object") {
-    if (cell.value.result !== undefined) return cell.value.result;
-    if (cell.value.text) return cell.value.text;
+  const value = cell.value;
+  if (value instanceof Date) return value;
+  // Prefer evaluated result for formulas / rich text / hyperlinks
+  if (value && typeof value === "object") {
+    // Formula or shared formula: return evaluated result if present; otherwise treat as empty
+    if (value.formula || value.sharedFormula) {
+      return value.result !== undefined ? value.result : null;
+    }
+    if (value.result !== undefined) return value.result;
+    if (value.text) return value.text;
+    if (Array.isArray(value.richText)) {
+      return value.richText.map((rt) => rt.text || "").join("");
+    }
+    if (value.hyperlink && value.text) return value.text;
+    if (value.error) return null;
   }
   if (cell.text) return cell.text;
-  return cell.value ?? null;
+  return value ?? null;
 };
 
 const findSplScrapHeaderRow = (worksheet) => {
@@ -150,10 +210,10 @@ const parseSplScrapXLSX = async (buffer) => {
   const meta = readSplScrapMetadata(worksheet);
   const dataRowsStart = headerRowInfo.index + 1;
   const rows = [];
+  let sawData = false;
 
   for (let r = dataRowsStart; r <= worksheet.rowCount; r++) {
     const row = worksheet.getRow(r);
-    let hasAny = false;
     const rowValues = {};
 
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
@@ -161,11 +221,15 @@ const parseSplScrapXLSX = async (buffer) => {
       const canonicalHeader = headerMap[originalHeader];
       if (!canonicalHeader) return;
       const value = normalizeCellValue(cell);
-      if (value !== null && value !== undefined && value !== "") hasAny = true;
       rowValues[canonicalHeader] = value;
     });
 
-    if (!hasAny) break; // stop at first empty row
+    const hasLineItem = hasSplScrapLineItemData(rowValues);
+    if (!hasLineItem) {
+      if (sawData) break; // stop at first empty row after data
+      continue; // skip leading empty rows
+    }
+    sawData = true;
     rows.push({ ...meta, ...rowValues });
   }
 
@@ -350,7 +414,11 @@ async function parseCSV(buffer, documentType) {
             cleaned[k] = t && t !== "" ? t : null;
             if (cleaned[k] !== null) hasAny = true;
           }
-          if (hasAny) sample.push(cleaned);
+          const shouldKeep =
+            documentType === "splScrap"
+              ? hasSplScrapLineItemData(cleaned)
+              : hasAny;
+          if (shouldKeep) sample.push(cleaned);
           if (++count >= 20) resolve();
         },
         resolve,
@@ -405,7 +473,11 @@ async function parseCSV(buffer, documentType) {
           cleaned[k] = t && t !== "" ? t : null;
           if (cleaned[k] !== null) hasAny = true;
         }
-        if (hasAny) results.push(cleaned);
+        const shouldKeep =
+          documentType === "splScrap"
+            ? hasSplScrapLineItemData(cleaned)
+            : hasAny;
+        if (shouldKeep) results.push(cleaned);
       },
       resolve,
       reject

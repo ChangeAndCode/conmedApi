@@ -284,6 +284,15 @@ const formatDateYmd = (value) => {
 const toCsvValue = (value) => {
   if (value === null || value === undefined) return "";
   if (value instanceof Date) return formatDateYmd(value);
+  if (typeof value === "object") {
+    if (value instanceof String) return value.toString();
+    if (value.result !== undefined) return String(value.result);
+    if (value.text) return String(value.text);
+    if (Array.isArray(value.richText)) {
+      return value.richText.map((rt) => rt.text || "").join("");
+    }
+    return "";
+  }
   if (Number.isFinite(value)) return String(value);
   return String(value);
 };
