@@ -138,10 +138,11 @@ const ensureDirectoriesExist = async () => {
   );
 };
 
-const processSingleFile = async (
+const processSingleFile = async ({
   filePath,
-  originalName = path.basename(filePath)
-) => {
+  originalName = path.basename(filePath),
+  readPath = filePath,
+}) => {
   let documentType = null;
   let fileBuffer;
   let newJob = null;
@@ -149,7 +150,7 @@ const processSingleFile = async (
   let errorReportPath = null;
 
   try {
-    fileBuffer = await fs.readFile(filePath);
+    fileBuffer = await fs.readFile(readPath);
 
     // --- Deteccion automatica del tipo ---
     documentType = await detectDocumentType(fileBuffer, originalName);
@@ -352,7 +353,7 @@ const processSingleFile = async (
     );
     try {
       const newPath = path.join(FAILED_DIR, originalName);
-      await fs.rename(filePath, newPath);
+    await fs.rename(filePath, newPath);
       console.log(
         `[Automated Service] Moved failed file ${originalName} to ${FAILED_DIR}`
       );
