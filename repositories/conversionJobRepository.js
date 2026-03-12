@@ -117,6 +117,15 @@ const getLatestAutomatedJobByFileNameAndDocType = async (
     .lean();
 };
 
+const getLatestAutomatedJobByFileName = async (fileName) => {
+  return await ConversionJob.findOne({
+    fileName,
+    isAutomated: true,
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+};
+
 module.exports = {
   createConversionJob,
   getConversionJobById,
@@ -125,4 +134,5 @@ module.exports = {
   getPaginatedAllJobs, // <-- EXPORT THE PAGINATED FUNCTION
   deleteJobsByUserId,
   getLatestAutomatedJobByFileNameAndDocType,
+  getLatestAutomatedJobByFileName,
 };
