@@ -263,6 +263,22 @@ const SPL_SCRAP_HEADERS = [
   { field: "PO Number", header: "PO Number" },
 ];
 
+const SPL_SCRAP_NUMERIC_HEADERS = new Set([
+  "Total gross Weight",
+  "Total bundles",
+  "Quantity",
+  "Unit Value (USD)",
+  "Added Value (USD)",
+  "Total Value (USD)",
+  "Unit Net Weight",
+]);
+
+// Headers that must output "0" when empty (packing list requirement)
+const SPL_SCRAP_FORCE_ZERO_HEADERS = new Set([
+  ...SPL_SCRAP_NUMERIC_HEADERS,
+  "Waybill Number",
+]);
+
 const formatDateYmd = (value) => {
   if (!value) return "";
   let d;
@@ -297,6 +313,52 @@ const toCsvValue = (value) => {
   return String(value);
 };
 
+const roundUpToDecimals = (num, decimals) => {
+  if (!Number.isFinite(num)) return NaN;
+  const factor = Math.pow(10, decimals);
+  // Subtract a tiny epsilon to avoid floating overflow to next integer
+  const scaled = Math.ceil(num * factor - 1e-9);
+  return scaled / factor;
+};
+
+const formatSplScrapNumber = (value) => {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return formatDateYmd(value);
+  if (typeof value === "object") {
+    const v = toCsvValue(value);
+    if (v === "") return "";
+    value = v;
+  }
+  if (typeof value === "string") {
+    const cleaned = value.replace(/,/g, "").trim();
+    if (cleaned === "") return "";
+    const num = Number(cleaned);
+    if (Number.isFinite(num)) {
+      const rounded = roundUpToDecimals(num, 8);
+      if (!Number.isFinite(rounded)) return "";
+      return rounded === 0 ? "0" : rounded.toFixed(8);
+    }
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    const rounded = roundUpToDecimals(value, 8);
+    if (!Number.isFinite(rounded)) return "";
+    return rounded === 0 ? "0" : rounded.toFixed(8);
+  }
+  return String(value);
+};
+
+const isEmptyValue = (value) => {
+  if (value === null || value === undefined) return true;
+  if (typeof value === "string" && value.trim() === "") return true;
+  if (typeof value === "number" && !Number.isFinite(value)) return true;
+  if (typeof value === "object") {
+    return toCsvValue(value) === "";
+  }
+  return false;
+};
+
 async function writeSplScrapCSV(data, filePath) {
   const rows = data.Sheet1 || [];
   const lines = [];
@@ -314,10 +376,16 @@ async function writeSplScrapCSV(data, filePath) {
   };
 
   for (const record of rows) {
-    const line = SPL_SCRAP_HEADERS.map(({ field }) => {
+    const line = SPL_SCRAP_HEADERS.map(({ field, header }) => {
       const raw = pickValue(record, field);
+      const normalized =
+        SPL_SCRAP_FORCE_ZERO_HEADERS.has(header) && isEmptyValue(raw)
+          ? 0
+          : raw;
       // basic CSV escaping for commas/quotes
-      let val = toCsvValue(raw);
+      let val = SPL_SCRAP_NUMERIC_HEADERS.has(header)
+        ? formatSplScrapNumber(normalized)
+        : toCsvValue(normalized);
       if (/[",\n]/.test(val)) {
         val = `"${val.replace(/"/g, '""')}"`;
       }
