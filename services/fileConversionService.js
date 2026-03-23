@@ -321,6 +321,15 @@ const roundUpToDecimals = (num, decimals) => {
   return scaled / factor;
 };
 
+const trimTrailingZeros = (str) => {
+  if (typeof str !== "string") return str;
+  if (!str.includes(".")) return str;
+  let out = str.replace(/0+$/, "");
+  if (out.endsWith(".")) out = out.slice(0, -1);
+  if (out === "-0") return "0";
+  return out;
+};
+
 const formatSplScrapNumber = (value) => {
   if (value === null || value === undefined) return "";
   if (value instanceof Date) return formatDateYmd(value);
@@ -336,7 +345,7 @@ const formatSplScrapNumber = (value) => {
     if (Number.isFinite(num)) {
       const rounded = roundUpToDecimals(num, 8);
       if (!Number.isFinite(rounded)) return "";
-      return rounded === 0 ? "0" : rounded.toFixed(8);
+      return trimTrailingZeros(rounded.toFixed(8));
     }
     return value;
   }
@@ -344,7 +353,7 @@ const formatSplScrapNumber = (value) => {
     if (!Number.isFinite(value)) return "";
     const rounded = roundUpToDecimals(value, 8);
     if (!Number.isFinite(rounded)) return "";
-    return rounded === 0 ? "0" : rounded.toFixed(8);
+    return trimTrailingZeros(rounded.toFixed(8));
   }
   return String(value);
 };
