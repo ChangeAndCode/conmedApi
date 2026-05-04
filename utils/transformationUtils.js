@@ -8,6 +8,7 @@ const { normalizeUOM } = require("../data/uomCatalog");
 const HTS_FORMATTED_RE = /^\d{4}\.\d{2}\.\d{4}$/; // ####.##.####
 const HTS_10_DIGITS_RE = /^\d{10}$/;
 const CONTROL_WS_RE = /[\t\r\n]+/g;
+const LOOSE_NUMBER_RE = /[-+]?(?:\d+(?:\.\d+)?|\.\d+)/;
 
 /** Recibe cualquier string con o sin puntos y devuelve ####.##.#### (12 chars) */
 function normalizeHTS(value) {
@@ -160,6 +161,25 @@ function cleanControlWhitespace(value) {
   const cleaned = value.replace(CONTROL_WS_RE, " ").trim();
   return cleaned;
 }
+
+function normalizeLooseNumber(value) {
+  if (value === null || value === undefined || value instanceof Date) return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : value;
+
+  const raw = String(value).trim();
+  if (raw === "") return raw;
+
+  const cleaned = raw.replace(/,/g, "");
+  const direct = Number(cleaned);
+  if (Number.isFinite(direct)) return direct;
+
+  const match = cleaned.match(LOOSE_NUMBER_RE);
+  if (!match) return raw;
+
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : raw;
+}
+
 function coerceExcelDate(value) {
   if (value == null || value === "") return null;
 
@@ -256,6 +276,9 @@ const applyTransformations = (parsedData, documentType) => {
           if (norm !== v) record[fieldName] = norm;
         } else if (fieldName === "Power Source Type") {
           const norm = normalizeSplPowerSource(v);
+          if (norm !== v) record[fieldName] = norm;
+        } else if (fieldName === "Total gross weight") {
+          const norm = normalizeLooseNumber(v);
           if (norm !== v) record[fieldName] = norm;
         }
       }

@@ -65,14 +65,12 @@ const processFileForConversion = async (
     errorReport.push(...integrityResult.errors);
   }
 
-  if (integrityResult.isValid) {
-    const businessValidationResult = await applyBusinessValidations(
-      transformedData,
-      documentType
-    );
-    if (!businessValidationResult.isValid) {
-      errorReport.push(...businessValidationResult.errors);
-    }
+  const businessValidationResult = await applyBusinessValidations(
+    transformedData,
+    documentType
+  );
+  if (!businessValidationResult.isValid) {
+    errorReport.push(...businessValidationResult.errors);
   }
 
   const hasErrors = errorReport.length > 0;
@@ -81,12 +79,14 @@ const processFileForConversion = async (
   const baseName = path.parse(originalName).name;
   const outputExt = outputFormat || getDefaultFormat(documentType) || "txt";
   const isSplScrap = documentType === "splScrap";
+  const allowOutputOnValidationError =
+    WRITE_TXT_ON_VALIDATION_ERROR && !isSplScrap;
   let convertedFilePath = null;
 
-  if (!hasErrors || WRITE_TXT_ON_VALIDATION_ERROR) {
+  if (!hasErrors || allowOutputOnValidationError) {
     let outputFileName = `${baseName}.${outputExt}`;
 
-    // For splScrap use PI/PE/PS + timestamp filename convention
+    // For splScrap use PI/PE + timestamp filename convention
     if (isSplScrap) {
       const prefix = pickSplScrapPrefix(transformedData);
       const generated = generateSplScrapFilename(prefix, new Date());
@@ -416,14 +416,12 @@ async function writeSplScrapCSV(data, filePath) {
   await fs.writeFile(filePath, lines.join("\n"));
 }
 
-// prefix PI for Southbound, PE for Northbound, PS for Scrap (default PE)
+// prefix PI for Southbound; PE for Northbound and Scrap (default PE)
 const pickSplScrapPrefix = (data) => {
   const rows = data.Sheet1 || [];
   if (!rows.length) return "PE";
   const shipment = String(rows[0]["Type of shipment"] || "").toLowerCase();
-  if (shipment.includes("scrap")) return "PS";
   if (shipment.includes("south")) return "PI";
-  if (shipment.includes("north")) return "PE";
   return "PE";
 };
 

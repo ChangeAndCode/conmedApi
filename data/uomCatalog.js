@@ -40,6 +40,7 @@ const STATIC_UOM = {
   PCS: { description: "Pieces", decimals: 0 },
   KG: { description: "Kilogram", decimals: 3 },
   LB: { description: "Pound", decimals: 3 },
+  OZ: { description: "Ounce", decimals: 3 },
   MT: { description: "Metric Ton", decimals: 3 },
   L: { description: "Liter", decimals: 3 },
   M: { description: "Meter", decimals: 3 },

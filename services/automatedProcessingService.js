@@ -247,8 +247,12 @@ const processSingleFile = async ({
     const uploads = [];
 
     const hasErrors = jobStatus !== "completed";
+    const isSplScrap = documentType === "splScrap";
     const canUploadTxt =
-      !hasErrors || (hasErrors && ALLOW_UPLOAD_ON_VALIDATION_ERROR);
+      !hasErrors ||
+      (hasErrors &&
+        ALLOW_UPLOAD_ON_VALIDATION_ERROR &&
+        !isSplScrap);
 
     let remoteConvertedPath = null;
     let remoteErrorPath = null;
